@@ -19,6 +19,7 @@ public class Session extends Thread {
         this.in=in;
         ServerMain.onlineStudents.add(studentID);
         ServerMain.signedStudents.add(studentID);
+        ServerMain.activeSessions.add(this);
     }
 
     @Override
@@ -40,11 +41,21 @@ public class Session extends Thread {
                     }
                     out.writeUTF(list.toString());
                 }
+                else if(choice.equalsIgnoreCase("Logout"))
+                {
+                    ServerMain.onlineStudents.remove(studentID);
+                    ServerMain.activeSessions.remove(this);
+                    out.writeUTF("Logged out");
+                    socket.close();
+                    return;
+                }
             }
         }
         catch (Exception e)
         {
             System.out.println("ALERT: "+studentID+" disconnected/failed transmission");
+            ServerMain.onlineStudents.remove(studentID);
+            ServerMain.activeSessions.remove(this);
         }
     }
 }

@@ -3,6 +3,8 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/CSE322.iml" filepath="$PROJECT_DIR$/.idea/CSE322.iml" />
+      <module fileurl="file://$PROJECT_DIR$/Offline1/IntroductorySocketCodes/IntroductorySocketCodes.iml" filepath="$PROJECT_DIR$/Offline1/IntroductorySocketCodes/IntroductorySocketCodes.iml" />
+      <module fileurl="file://$PROJECT_DIR$/Offline1/Offline1.iml" filepath="$PROJECT_DIR$/Offline1/Offline1.iml" />
     </modules>
   </component>
 </project>

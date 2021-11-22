@@ -3,6 +3,7 @@ package ClientSide;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.Socket;
 import java.util.Scanner;
 
@@ -11,7 +12,10 @@ public class ClientMain {
         Scanner scanner = new Scanner(System.in);
         System.out.print("Student ID: ");
         String studentID = scanner.next();
-        Socket socket = new Socket("localhost",6666);
+        System.out.print("Intended Port: ");
+        String intendedPort = scanner.next();
+
+        Socket socket = new Socket("localhost", 6666, InetAddress.getByName("localhost"), Integer.parseInt(intendedPort));
         System.out.println("Connection established");
         DataOutputStream out=new DataOutputStream(socket.getOutputStream());
         DataInputStream in=new DataInputStream(socket.getInputStream());
@@ -30,6 +34,14 @@ public class ClientMain {
                 out.writeUTF(choice);
                 String reply=in.readUTF();
                 System.out.println(reply);
+            }
+            else if(choice.equalsIgnoreCase("Logout"))
+            {
+                out.writeUTF(choice);
+                String reply=in.readUTF();
+                System.out.println(reply);
+                socket.close();
+                return;
             }
         }
     }
