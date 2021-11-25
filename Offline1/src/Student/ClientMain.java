@@ -14,8 +14,8 @@ import java.util.Scanner;
 
 public class ClientMain {
     static int MAX_BUFFER_SIZE=524288000;
-    static int MIN_CHUNK_SIZE=1000;
-    static int MAX_CHUNK_SIZE=1024;
+    static int MIN_CHUNK_SIZE=1<<5;
+    static int MAX_CHUNK_SIZE=1<<10;
 
     static DataOutputStream out;
     static DataInputStream in;

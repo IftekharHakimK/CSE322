@@ -12,8 +12,9 @@ import java.util.Set;
 
 public class ServerMain {
     static int MAX_BUFFER_SIZE=524288000;
-    static int MIN_CHUNK_SIZE=1000;
-    static int MAX_CHUNK_SIZE=1024;
+    static int CUR_BUF=0;
+    static int MIN_CHUNK_SIZE=1<<5;
+    static int MAX_CHUNK_SIZE=1<<10;
     static Set<String> onlineStudents = new HashSet<>();
     static Set<String> signedStudents = new HashSet<>();
     static Set<Session> activeSessions = new HashSet<>();
@@ -27,6 +28,10 @@ public class ServerMain {
         while (true)
         {
             Socket socket = serverSocket.accept();
+
+            socket.setReceiveBufferSize(MAX_BUFFER_SIZE);
+            socket.setSendBufferSize(MAX_BUFFER_SIZE);
+
             DataOutputStream out = new DataOutputStream(socket.getOutputStream());
             DataInputStream in=new DataInputStream(socket.getInputStream());
 

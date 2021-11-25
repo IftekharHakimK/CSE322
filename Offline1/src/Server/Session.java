@@ -21,19 +21,21 @@ public class Session extends Thread {
     Stack<String> messages = new Stack<>();
 
     Session(Socket socket, String studentID, DataOutputStream out, DataInputStream in) throws SocketException {
+
         this.socket=socket;
         this.socket.setSendBufferSize(ServerMain.MAX_BUFFER_SIZE);
         this.socket.setReceiveBufferSize(ServerMain.MAX_BUFFER_SIZE);
         this.studentID=studentID;
         this.out=out;
         this.in=in;
+
         if(!ServerMain.signedStudents.contains(studentID))
         {
-            boolean y=(new File("src/Server/"+studentID)).mkdir();
-            System.out.println(y);
+            (new File("src/Server/"+studentID)).mkdir();
             (new File("src/Server/"+studentID+"/public")).mkdir();
             (new File("src/Server/"+studentID+"/private")).mkdir();
         }
+
         ServerMain.onlineStudents.add(studentID);
         ServerMain.signedStudents.add(studentID);
         ServerMain.activeSessions.add(this);
@@ -42,7 +44,8 @@ public class Session extends Thread {
     {
         try {
             File file = new File("src/Server/" + owner + "/" + type + "/" + filename);
-            if (file.exists()) {
+            if (file.exists())
+            {
                 out.writeUTF("File exists");
 
                 long f = file.length();
@@ -91,12 +94,15 @@ public class Session extends Thread {
             int filesize = Integer.valueOf(in.readUTF());
             System.out.println(filesize);
 
-            if (filesize <= in.available() + socket.getReceiveBufferSize() && (mode.equals("public") || mode.equals("private")))
+            if (filesize + ServerMain.CUR_BUF <= ServerMain.MAX_BUFFER_SIZE && (mode.equals("public") || mode.equals("private")))
+            {
                 out.writeUTF("Allowed");
+            }
             else {
                 out.writeUTF("Not allowed");
                 return;
             }
+
 
             int chunk_size = new Random().nextInt(ServerMain.MAX_CHUNK_SIZE) + ServerMain.MIN_CHUNK_SIZE;
             int numberOfChunks = (int) Math.ceil(filesize * 1.0 / chunk_size);
@@ -110,6 +116,9 @@ public class Session extends Thread {
 
             int off = 0;
             boolean broken = false;
+
+            ServerMain.CUR_BUF+=chunk_size;
+
             for (int i = 1; i <= numberOfChunks; i++) {
                 if (off + chunk_size <= filesize) {
                     in.read(array, off, chunk_size);
@@ -131,9 +140,11 @@ public class Session extends Thread {
                 System.out.println(studentID+" uploaded "+filename+" (fileID: "+fileID+")");
                 Path path = Paths.get("src/Server/" + studentID + "/" + mode + "/" + filename);
                 Files.write(path, array);
+
             } else {
                 ServerMain.fileCount--;
             }
+            ServerMain.CUR_BUF-=chunk_size;
         }
         catch (Exception e)
         {
