@@ -143,10 +143,15 @@ public class Session extends Thread {
             }
             String fin=fileIn.readUTF();
             if (!broken&&fin.equalsIgnoreCase("Completed")) {
-                System.out.println(studentID+" uploaded "+filename+" (fileID: "+fileID+")");
+                System.out.println(studentID + " uploaded " + filename + " (fileID: " + fileID + ")");
                 Path path = Paths.get("src/Server/" + studentID + "/" + mode + "/" + filename);
                 Files.write(path, array);
 
+                String reqID = fileIn.readUTF();
+                if (!reqID.equalsIgnoreCase("none"))
+                {
+                    inform(reqID);
+                }
             } else {
                 ServerMain.fileCount--;
             }
@@ -157,6 +162,19 @@ public class Session extends Thread {
             System.out.println("ALERT: "+studentID+" disconnected/failed transmission");
         }
     }
+    public void inform(String reqID)
+    {
+        String requester=ServerMain.requests.get(reqID);
+        for(var u:ServerMain.activeSessions)
+        {
+            if(u.studentID.equals(requester))
+            {
+                u.messages.add("Request "+reqID+" was served by "+studentID);
+                break;
+            }
+        }
+    }
+
     @Override
     public void run() {
         try
@@ -275,21 +293,6 @@ public class Session extends Thread {
                         messageOut.writeUTF("Request is valid");
                     else
                         messageOut.writeUTF("Request does not exists");
-                }
-                else if(choice.equalsIgnoreCase("Notify"))
-                {
-                    String reqID=messageIn.readUTF();
-                    String requester=ServerMain.requests.get(reqID);
-                    System.out.println("w: "+reqID);
-                    System.out.println("requester: "+requester);
-                    for(var u:ServerMain.activeSessions)
-                    {
-                        if(u.studentID.equals(requester))
-                        {
-                            u.messages.add("Request "+reqID+" was served by "+studentID);
-                            break;
-                        }
-                    }
                 }
             }
         }

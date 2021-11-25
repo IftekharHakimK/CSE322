@@ -14,8 +14,8 @@ import java.util.Scanner;
 
 public class ClientMain {
     static int MAX_BUFFER_SIZE=524288000;
-    static int MIN_CHUNK_SIZE=100000;
-    static int MAX_CHUNK_SIZE=200000;
+    static int MIN_CHUNK_SIZE=1<<5;
+    static int MAX_CHUNK_SIZE=1<<10;
 
     static DataOutputStream fileOut,messageOut;
     static DataInputStream fileIn,messageIn;
@@ -23,7 +23,7 @@ public class ClientMain {
     static Scanner scanner;
 
 
-    public static boolean upload(String filename, String mode)
+    public static boolean upload(String filename, String mode,String reqID)
     {
         try
         {
@@ -77,6 +77,10 @@ public class ClientMain {
                 }
                 fileOut.writeUTF("Completed");
                 System.out.println("Upload completed");
+
+                if(reqID==null) fileOut.writeUTF("none");
+                else fileOut.writeUTF(reqID);
+
                 return true;
             }
             else
@@ -293,7 +297,7 @@ public class ClientMain {
                 messageOut.writeUTF("upload");
                 fileThread = new Thread(()->
                 {
-                    upload(filename,mode);
+                    upload(filename,mode,null);
                 });
                 fileThread.start();
             }
@@ -326,12 +330,7 @@ public class ClientMain {
                     messageOut.writeUTF("Upload");
                     fileThread = new Thread(()->
                     {
-                        boolean f=upload(filename,"public");
-                           /* if(f)
-                            {
-                                fileOut.writeUTF("Notify");
-                                fileOut.writeUTF(reqID);
-                            }*/
+                        boolean f=upload(filename,"public",reqID);
                     });
                     fileThread.start();
 

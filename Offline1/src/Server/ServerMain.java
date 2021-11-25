@@ -24,11 +24,11 @@ public class ServerMain {
 
     public static void main(String [] args) throws IOException
     {
-        ServerSocket serverfileSocket = new ServerSocket(6666);
+        ServerSocket serverFileSocket = new ServerSocket(6666);
         ServerSocket serverMessageSocket = new ServerSocket(6667);
         while (true)
         {
-            Socket fileSocket = serverfileSocket.accept();
+            Socket fileSocket = serverFileSocket.accept();
             Socket messageSocket = serverMessageSocket.accept();
 
             fileSocket.setReceiveBufferSize(MAX_BUFFER_SIZE);
