@@ -3,6 +3,7 @@ package Server;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketException;
 import java.nio.file.Files;
@@ -14,20 +15,24 @@ import java.util.Random;
 import java.util.Stack;
 
 public class Session extends Thread {
-    Socket socket;
+    Socket fileSocket,messageSocket;
     String studentID;
-    DataOutputStream out;
-    DataInputStream in;
+    DataOutputStream messageOut,fileOut;
+    DataInputStream messageIn,fileIn;
     Stack<String> messages = new Stack<>();
 
-    Session(Socket socket, String studentID, DataOutputStream out, DataInputStream in) throws SocketException {
+    Session(Socket fileSocket,Socket messageSocket, String studentID, DataOutputStream messageOut,
+            DataInputStream messageIn,DataOutputStream fileOut, DataInputStream fileIn) throws SocketException {
 
-        this.socket=socket;
-        this.socket.setSendBufferSize(ServerMain.MAX_BUFFER_SIZE);
-        this.socket.setReceiveBufferSize(ServerMain.MAX_BUFFER_SIZE);
+        this.fileSocket=fileSocket;
+        this.messageSocket=messageSocket;
+        this.fileSocket.setSendBufferSize(ServerMain.MAX_BUFFER_SIZE);
+        this.fileSocket.setReceiveBufferSize(ServerMain.MAX_BUFFER_SIZE);
         this.studentID=studentID;
-        this.out=out;
-        this.in=in;
+        this.messageOut=messageOut;
+        this.messageIn=messageIn;
+        this.fileOut=fileOut;
+        this.fileIn=fileIn;
 
         if(!ServerMain.signedStudents.contains(studentID))
         {
@@ -40,19 +45,20 @@ public class Session extends Thread {
         ServerMain.signedStudents.add(studentID);
         ServerMain.activeSessions.add(this);
     }
+
     public void download(String owner, String filename, String type)
     {
         try {
             File file = new File("src/Server/" + owner + "/" + type + "/" + filename);
             if (file.exists())
             {
-                out.writeUTF("File exists");
+                fileOut.writeUTF("File exists");
 
                 long f = file.length();
                 String fS = String.valueOf(f);
-                out.writeUTF(fS);
+                fileOut.writeUTF(fS);
 
-                String reply = in.readUTF();
+                String reply = fileIn.readUTF();
                 if (reply.equalsIgnoreCase("Not allowed")) {
                     System.out.println("Transmission not allowed");
                     return;
@@ -66,19 +72,19 @@ public class Session extends Thread {
                 System.out.println("tot: " + file.length());
                 for (int i = 1; i <= numberOfChunks; i++) {
                     if (off + chunk_size <= array.length) {
-                        out.write(array, off, chunk_size);
+                        fileOut.write(array, off, chunk_size);
                         off += chunk_size;
                     } else {
-                        out.write(array, off, array.length - off);
+                        fileOut.write(array, off, array.length - off);
                         off = array.length;
                     }
-                    out.flush();
+                    fileOut.flush();
                     System.out.println("Sent " + String.format("%.2f", off * 100.0 / array.length) + "%");
 
                 }
-                String fin = in.readUTF();
+                String fin = fileIn.readUTF();
                 System.out.println(fin);
-            } else out.writeUTF("No such file");
+            } else fileOut.writeUTF("No such file");
         }catch (Exception e)
         {
             System.out.println("ALERT: "+studentID+" disconnected/failed transmission");
@@ -88,18 +94,18 @@ public class Session extends Thread {
     {
         try
         {
-            String filename = in.readUTF();
-            String mode = in.readUTF();
+            String filename = fileIn.readUTF();
+            String mode = fileIn.readUTF();
             System.out.println(mode);
-            int filesize = Integer.valueOf(in.readUTF());
+            int filesize = Integer.valueOf(fileIn.readUTF());
             System.out.println(filesize);
-
+            System.out.println(filesize + ServerMain.CUR_BUF <= ServerMain.MAX_BUFFER_SIZE);
             if (filesize + ServerMain.CUR_BUF <= ServerMain.MAX_BUFFER_SIZE && (mode.equals("public") || mode.equals("private")))
             {
-                out.writeUTF("Allowed");
+                fileOut.writeUTF("Allowed");
             }
             else {
-                out.writeUTF("Not allowed");
+                fileOut.writeUTF("Not allowed");
                 return;
             }
 
@@ -107,9 +113,9 @@ public class Session extends Thread {
             int chunk_size = new Random().nextInt(ServerMain.MAX_CHUNK_SIZE) + ServerMain.MIN_CHUNK_SIZE;
             int numberOfChunks = (int) Math.ceil(filesize * 1.0 / chunk_size);
 
-            out.writeUTF(String.valueOf(chunk_size));
+            fileOut.writeUTF(String.valueOf(chunk_size));
             String fileID="File_" + ServerMain.fileCount;
-            out.writeUTF(fileID);
+            fileOut.writeUTF(fileID);
             ServerMain.fileCount++;
 
             byte[] array = new byte[filesize];
@@ -121,21 +127,21 @@ public class Session extends Thread {
 
             for (int i = 1; i <= numberOfChunks; i++) {
                 if (off + chunk_size <= filesize) {
-                    in.read(array, off, chunk_size);
+                    fileIn.read(array, off, chunk_size);
                     off += chunk_size;
                 } else {
-                    in.read(array, off, filesize - off);
+                    fileIn.read(array, off, filesize - off);
                     off = filesize;
                 }
                 System.out.println("off: "+off);
-                out.writeUTF("Acknowledged");
-                String reply = in.readUTF();
+                fileOut.writeUTF("Acknowledged");
+                String reply = fileIn.readUTF();
                 if (reply.equalsIgnoreCase("Timedout")) {
                     broken = true;
                     break;
                 }
             }
-            String fin=in.readUTF();
+            String fin=fileIn.readUTF();
             if (!broken&&fin.equalsIgnoreCase("Completed")) {
                 System.out.println(studentID+" uploaded "+filename+" (fileID: "+fileID+")");
                 Path path = Paths.get("src/Server/" + studentID + "/" + mode + "/" + filename);
@@ -157,7 +163,7 @@ public class Session extends Thread {
         {
             while (true)
             {
-                String choice=in.readUTF();
+                String choice=messageIn.readUTF();
                 if(choice.equalsIgnoreCase("Users"))
                 {
                     ArrayList<String> list = new ArrayList<>();
@@ -168,14 +174,15 @@ public class Session extends Thread {
                         else
                             list.add(u+" (Offline)");
                     }
-                    out.writeUTF(list.toString());
+                    messageOut.writeUTF(list.toString());
                 }
                 else if(choice.equalsIgnoreCase("Logout"))
                 {
                     ServerMain.onlineStudents.remove(studentID);
                     ServerMain.activeSessions.remove(this);
-                    out.writeUTF("Logged out");
-                    socket.close();
+                    messageOut.writeUTF("Logged out");
+                    fileSocket.close();
+                    messageSocket.close();
                     return;
                 }
                 else if(choice.equalsIgnoreCase("Lookmyfiles"))
@@ -185,45 +192,64 @@ public class Session extends Thread {
                     for (var u : files) {
                         filenames.add(u.getName());
                     }
-                    out.writeUTF(filenames.toString());
+                    messageOut.writeUTF(filenames.toString());
 
                     filenames = new ArrayList<>();
                     files = new File("src/Server/" + studentID + "/private").listFiles();
                     for (var u : files) {
                         filenames.add(u.getName());
                     }
-                    out.writeUTF(filenames.toString());
+                    messageOut.writeUTF(filenames.toString());
                 }
                 else if (choice.equalsIgnoreCase("Lookfrom"))
                 {
-                    String owner=in.readUTF();
+                    String owner=messageIn.readUTF();
                     ArrayList<String> filenames = new ArrayList<>();
                     File[] files = new File("src/Server/" + owner + "/public").listFiles();
                     for (var u : files) {
                         filenames.add(u.getName());
                     }
-                    out.writeUTF(filenames.toString());
+                    messageOut.writeUTF(filenames.toString());
                 }
                 else if(choice.equalsIgnoreCase("Downloadmyfile"))
                 {
-                    String filename,type;
-                    filename=in.readUTF();
-                    type=in.readUTF();
-                    download(studentID,filename,type);
+                    Thread temp = new Thread(()->
+                    {
+                        try {
+                            String filename, type;
+                            filename = fileIn.readUTF();
+                            type = fileIn.readUTF();
+                            download(studentID, filename, type);
+                        }
+                        catch (IOException e){}
+                    });
+                    temp.start();
                 }
                 else if(choice.equalsIgnoreCase("Downloadfrom"))
                 {
-                    String owner,filename;
-                    owner=in.readUTF();
-                    filename=in.readUTF();
-                    download(owner,filename,"public");
+                    Thread temp = new Thread(()->
+                    {
+                        try
+                        {
+                            String owner,filename;
+                            owner=fileIn.readUTF();
+                            filename=fileIn.readUTF();
+                            download(owner,filename,"public");
+                        }
+                        catch (IOException e) { }
+                    });
+                    temp.start();
                 }
                 else if(choice.equalsIgnoreCase("Upload")) {
-                    upload();
+                    Thread temp = new Thread(()->
+                    {
+                        upload();
+                    });
+                    temp.start();
                 }
                 else if(choice.equalsIgnoreCase("Request"))
                 {
-                    String message=in.readUTF();
+                    String message=messageIn.readUTF();
                     System.out.println("got "+message);
                     String reqID="ReqID"+ServerMain.reqCount++;
                     ServerMain.requests.put(reqID,studentID);
@@ -239,20 +265,20 @@ public class Session extends Thread {
                 else if(choice.equalsIgnoreCase("Message"))
                 {
                     String re="Messages: \n"+messages.toString();
-                    out.writeUTF(re);
+                    messageOut.writeUTF(re);
                     messages.clear();
                 }
                 else if(choice.equalsIgnoreCase("checkreq"))
                 {
-                    String reqID=in.readUTF();
+                    String reqID=messageIn.readUTF();
                     if(ServerMain.requests.containsKey(reqID))
-                        out.writeUTF("Request is valid");
+                        messageOut.writeUTF("Request is valid");
                     else
-                        out.writeUTF("Request does not exists");
+                        messageOut.writeUTF("Request does not exists");
                 }
                 else if(choice.equalsIgnoreCase("Notify"))
                 {
-                    String reqID=in.readUTF();
+                    String reqID=messageIn.readUTF();
                     String requester=ServerMain.requests.get(reqID);
                     System.out.println("w: "+reqID);
                     System.out.println("requester: "+requester);

@@ -14,13 +14,14 @@ import java.util.Scanner;
 
 public class ClientMain {
     static int MAX_BUFFER_SIZE=524288000;
-    static int MIN_CHUNK_SIZE=1<<5;
-    static int MAX_CHUNK_SIZE=1<<10;
+    static int MIN_CHUNK_SIZE=100000;
+    static int MAX_CHUNK_SIZE=200000;
 
-    static DataOutputStream out;
-    static DataInputStream in;
-    static Socket socket;
+    static DataOutputStream fileOut,messageOut;
+    static DataInputStream fileIn,messageIn;
+    static Socket fileSocket,messageSocket;
     static Scanner scanner;
+
 
     public static boolean upload(String filename, String mode)
     {
@@ -29,22 +30,21 @@ public class ClientMain {
             File file = new File(filename);
             if(file.exists())
             {
-                out.writeUTF(filename);
-                out.writeUTF(mode);
+                fileOut.writeUTF(filename);
+                fileOut.writeUTF(mode);
                 long f=file.length();
                 String fS=String.valueOf(f);
-                out.writeUTF(fS);
+                fileOut.writeUTF(fS);
 
-                String reply=in.readUTF().toString();
+                String reply=fileIn.readUTF().toString();
                 if(reply.equalsIgnoreCase("Not allowed"))
                 {
                     System.out.println("Transmission not allowed");
                     return false;
                 }
-                int chunk_size= Integer.valueOf(in.readUTF());
-                String fileID=in.readUTF();
-                byte[] array = Files.readAllBytes(
-                        Paths.get(file.getPath()));
+                int chunk_size= Integer.valueOf(fileIn.readUTF());
+                String fileID=fileIn.readUTF();
+                byte[] array = Files.readAllBytes(Paths.get(file.getPath()));
 
                 int numberOfChunks=(int)Math.ceil(array.length*1.0/chunk_size);
                 int off=0;
@@ -53,29 +53,29 @@ public class ClientMain {
                 {
                     if(off+chunk_size<=array.length)
                     {
-                        out.write(array,off,chunk_size);
+                        fileOut.write(array,off,chunk_size);
                         off+=chunk_size;
                     }
                     else
                     {
-                        out.write(array,off,array.length-off);
+                        fileOut.write(array,off,array.length-off);
                         off=array.length;
                     }
-                    out.flush();
+                    fileOut.flush();
                     System.out.println("Sent "+String.format("%.2f",off*100.0/array.length)+"%");
                     try {
-                        socket.setSoTimeout(3000);
-                        String ack = in.readUTF();
-                        out.writeUTF("Ok");
-                        socket.setSoTimeout(0);
+                        fileSocket.setSoTimeout(3000);
+                        String ack = fileIn.readUTF();
+                        fileOut.writeUTF("Ok");
+                        fileSocket.setSoTimeout(0);
                     }catch (SocketTimeoutException e)
                     {
                         System.out.println("Timed out");
-                        out.writeUTF("Timedout");
+                        fileOut.writeUTF("Timedout");
                         return false;
                     }
                 }
-                out.writeUTF("Completed");
+                fileOut.writeUTF("Completed");
                 System.out.println("Upload completed");
                 return true;
             }
@@ -96,16 +96,17 @@ public class ClientMain {
     {
         try
         {
-            String reply=in.readUTF();
+            String reply=fileIn.readUTF();
             System.out.println(reply);
             if(reply.equals("File exists"))
             {
-                int filesize = Integer.valueOf(in.readUTF());
+                int filesize = Integer.valueOf(fileIn.readUTF());
                 System.out.println(filesize);
-                if (filesize <= in.available() + socket.getReceiveBufferSize())
-                    out.writeUTF("Allowed");
+                System.out.println("check: "+filesize+" "+fileIn.available() +" "+fileSocket.getReceiveBufferSize());
+                if (filesize + fileIn.available() <= fileSocket.getReceiveBufferSize())
+                    fileOut.writeUTF("Allowed");
                 else {
-                    out.writeUTF("Not allowed");
+                    fileOut.writeUTF("Not allowed");
                     return;
                 }
                 int chunk_size= MAX_CHUNK_SIZE;
@@ -114,17 +115,17 @@ public class ClientMain {
                 int off=0;
                 for (int i = 1; i <= numberOfChunks; i++) {
                     if (off + chunk_size <= filesize) {
-                        in.read(array, off, chunk_size);
+                        fileIn.read(array, off, chunk_size);
                         off += chunk_size;
                     } else {
-                        in.read(array, off, filesize - off);
+                        fileIn.read(array, off, filesize - off);
                         off = filesize;
                     }
-                    System.out.println("Downloaded "+String.format("%.2f",off*100.0/array.length)+"%");
+                    //System.out.println("Downloaded "+String.format("%.2f",off*100.0/array.length)+"%");
                 }
                 if(off==filesize)
                 {
-                    out.writeUTF("Download completed");
+                    fileOut.writeUTF("Download completed");
                     Path path = Paths.get(filename);
                     Files.write(path, array);
                     System.out.println("Download completed");
@@ -135,133 +136,211 @@ public class ClientMain {
             System.out.println("Failed");
         }
     }
+
+    public static void lookUpUsers() throws IOException {
+        messageOut.writeUTF("users");
+        String reply=messageIn.readUTF();
+        System.out.println(reply);
+    }
+    public static void logout() throws IOException {
+        messageOut.writeUTF("logout");
+        String reply=messageIn.readUTF();
+        System.out.println(reply);
+        messageSocket.close();
+        fileSocket.close();
+        return;
+    }
+    public static void lookmyfiles() throws IOException {
+        messageOut.writeUTF("lookmyfiles");
+        String reply="Public files: "+messageIn.readUTF()+"\n"+
+                "Private files: "+messageIn.readUTF();
+        System.out.println(reply);
+    }
+    public static void lookfrom () throws IOException {
+        messageOut.writeUTF("lookfrom");
+        System.out.print("Owner: ");
+        String owner=scanner.next();
+        messageOut.writeUTF(owner);
+        String re="Public files of "+owner+": "+messageIn.readUTF();
+        System.out.println(re);
+    }
+    public static void request() throws IOException {
+        messageOut.writeUTF("request");
+        System.out.print("Put your request message: ");
+
+        String message=scanner.next();
+        System.out.println("Placed: "+message);
+        messageOut.writeUTF(message);
+    }
+    public static void message() throws IOException {
+        messageOut.writeUTF("message");
+        System.out.println("Your unread messages here (recent first): \n"+messageIn.readUTF());
+    }
+
+
     public static void main(String[] args) throws IOException {
         scanner = new Scanner(System.in);
         System.out.print("Student ID: ");
         String studentID = scanner.next();
-        System.out.print("Intended Port: ");
-        String intendedPort = scanner.next();
 
-        socket = new Socket("localhost", 6666, InetAddress.getByName("localhost"), Integer.parseInt(intendedPort));
-        socket.setSendBufferSize(MAX_BUFFER_SIZE);
-        socket.setReceiveBufferSize(MAX_BUFFER_SIZE);
+        fileSocket = new Socket("localhost", 6666);
+        messageSocket = new Socket("localhost", 6667);
+
+        fileSocket.setSendBufferSize(MAX_BUFFER_SIZE);
+        fileSocket.setReceiveBufferSize(MAX_BUFFER_SIZE);
 
         System.out.println("Connection established");
-        out=new DataOutputStream(socket.getOutputStream());
-        in=new DataInputStream(socket.getInputStream());
-        out.writeUTF(studentID);
-        String msg=in.readUTF();
+
+        fileOut=new DataOutputStream(fileSocket.getOutputStream());
+        fileIn=new DataInputStream(fileSocket.getInputStream());
+        messageOut=new DataOutputStream(messageSocket.getOutputStream());
+        messageIn=new DataInputStream(messageSocket.getInputStream());
+
+        messageOut.writeUTF(studentID);
+        String msg=messageIn.readUTF();
         System.out.println(msg);
         if(msg.equalsIgnoreCase("Login failed"))
         {
+            fileSocket.close();
+            messageSocket.close();
             return;
         }
+
+
+        Thread fileThread = null;
         while (true)
         {
+            System.out.print("Command: ");
             String choice=scanner.next();
             if(choice.equalsIgnoreCase("Users"))
             {
-                out.writeUTF(choice);
-                String reply=in.readUTF();
-                System.out.println(reply);
+                lookUpUsers();
             }
             else if(choice.equalsIgnoreCase("Logout"))
             {
-                out.writeUTF(choice);
-                String reply=in.readUTF();
-                System.out.println(reply);
-                socket.close();
+                logout();
                 return;
             }
             else if(choice.equalsIgnoreCase("Lookmyfiles"))
             {
-                out.writeUTF(choice);
-                String reply="Public files: "+in.readUTF()+"\n"+
-                             "Private files: "+in.readUTF();
-                System.out.println(reply);
+                lookmyfiles();
             }
             else if(choice.equalsIgnoreCase("Lookfrom"))
             {
-                out.writeUTF(choice);
-                System.out.print("Owner: ");
-                String owner=scanner.next();
-                out.writeUTF(owner);
-                String re="Public files of "+owner+": "+in.readUTF();
-                System.out.println(re);
+                lookfrom();
             }
             else if(choice.equalsIgnoreCase("Downloadmyfile"))
             {
-                out.writeUTF(choice);
+                if(fileThread!=null&&fileThread.isAlive()==true)
+                {
+                    System.out.println("File upload-download status is busy, try later");
+                    continue;
+                }
+
                 String filename,type;
                 System.out.print("Filename: ");
                 filename=scanner.next();
                 System.out.print("Type: ");
                 type=scanner.next();
-                out.writeUTF(filename);
-                out.writeUTF(type);
-                download(filename);
+                messageOut.writeUTF("downloadmyfile");
+                fileOut.writeUTF(filename);
+                fileOut.writeUTF(type);
+
+                fileThread = new Thread(() ->
+                {
+                    download(filename);
+                });
+                fileThread.start();
             }
             else if(choice.equalsIgnoreCase("Downloadfrom"))
             {
-                out.writeUTF(choice);
+                if(fileThread!=null&&fileThread.isAlive()==true)
+                {
+                    System.out.println("File upload-download status is busy, try later");
+                    continue;
+                }
                 String owner,filename;
                 System.out.print("Owner: ");
                 owner=scanner.next();
                 System.out.print("Filename: ");
                 filename=scanner.next();
-                out.writeUTF(owner);
-                out.writeUTF(filename);
-                download(filename);
+                messageOut.writeUTF("downloadfrom");
+
+                fileThread = new Thread(() ->
+                {
+                    try {
+                        fileOut.writeUTF(owner);
+                        fileOut.writeUTF(filename);
+                        download(filename);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                });
+                fileThread.start();
             }
             else if(choice.equalsIgnoreCase("Upload"))
             {
-                out.writeUTF(choice);
+                if(fileThread!=null&&fileThread.isAlive()==true)
+                {
+                    System.out.println("File upload-download status is busy, try later");
+                    continue;
+                }
                 String filename,mode;
                 System.out.print("Filename: ");
                 filename=scanner.next();
                 System.out.print("Mode: ");
                 mode=scanner.next();
-                upload(filename,mode);
+                messageOut.writeUTF("upload");
+                fileThread = new Thread(()->
+                {
+                    upload(filename,mode);
+                });
+                fileThread.start();
             }
             else if(choice.equalsIgnoreCase("Request"))
             {
-                out.writeUTF(choice);
-                System.out.print("Put your request message: ");
-
-                String message=scanner.next();
-                System.out.println("Placed: "+message);
-                out.writeUTF(message);
+                request();
             }
             else if(choice.equalsIgnoreCase("Message"))
             {
-                out.writeUTF(choice);
-                System.out.println("Your unread messages here (recent first): \n"+in.readUTF());
+                message();
             }
             else if(choice.equalsIgnoreCase("Serve"))
             {
-                out.writeUTF("Checkreq");
+                if(fileThread!=null&&fileThread.isAlive()==true)
+                {
+                    System.out.println("File upload-download status is busy, try later");
+                    continue;
+                }
+
                 System.out.print("ReqID: ");
                 String reqID=scanner.next();
-                out.writeUTF(reqID);
-                String re=in.readUTF();
+                messageOut.writeUTF("Checkreq");
+                messageOut.writeUTF(reqID);
+                String re=messageIn.readUTF();
                 if(re.equalsIgnoreCase("Request is valid"))
                 {
-                    String filename,mode;
+                    String filename;
                     System.out.print("Filename: ");
                     filename=scanner.next();
-                    out.writeUTF("Upload");
-                    boolean f=upload(filename,"public");
-                    if(f)
+                    messageOut.writeUTF("Upload");
+                    fileThread = new Thread(()->
                     {
-                        out.writeUTF("Notify");
-                        out.writeUTF(reqID);
-                    }
+                        boolean f=upload(filename,"public");
+                           /* if(f)
+                            {
+                                fileOut.writeUTF("Notify");
+                                fileOut.writeUTF(reqID);
+                            }*/
+                    });
+                    fileThread.start();
+
                 }
                 else
                 {
                     System.out.println("Request does not exists");
-                    continue;
                 }
+
             }
         }
     }

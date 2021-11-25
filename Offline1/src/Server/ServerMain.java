@@ -24,28 +24,37 @@ public class ServerMain {
 
     public static void main(String [] args) throws IOException
     {
-        ServerSocket serverSocket = new ServerSocket(6666);
+        ServerSocket serverfileSocket = new ServerSocket(6666);
+        ServerSocket serverMessageSocket = new ServerSocket(6667);
         while (true)
         {
-            Socket socket = serverSocket.accept();
+            Socket fileSocket = serverfileSocket.accept();
+            Socket messageSocket = serverMessageSocket.accept();
 
-            socket.setReceiveBufferSize(MAX_BUFFER_SIZE);
-            socket.setSendBufferSize(MAX_BUFFER_SIZE);
+            fileSocket.setReceiveBufferSize(MAX_BUFFER_SIZE);
+            fileSocket.setSendBufferSize(MAX_BUFFER_SIZE);
 
-            DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-            DataInputStream in=new DataInputStream(socket.getInputStream());
+            DataOutputStream fileOut = new DataOutputStream(fileSocket.getOutputStream());
+            DataInputStream fileIn=new DataInputStream(fileSocket.getInputStream());
 
-            String address=socket.getInetAddress().toString();
-            int port = socket.getPort();
-            String studentID=in.readUTF();
-            System.out.println(studentID+" connected with address: "+address+" port: "+port);
+            DataOutputStream messageOut = new DataOutputStream(messageSocket.getOutputStream());
+            DataInputStream messageIn=new DataInputStream(messageSocket.getInputStream());
+
+            String address=fileSocket.getInetAddress().toString();
+
+            int file_port = fileSocket.getPort();
+            int message_port = messageSocket.getPort();
+            String studentID=messageIn.readUTF();
+
+            System.out.println(studentID+" connected with address: "+address+" port: "+file_port +" and "+message_port);
             if(onlineStudents.contains(studentID))
             {
-                out.writeUTF("Login failed");
+                messageOut.writeUTF("Login failed");
                 continue;
             }
-            out.writeUTF("Login successful");
-            Thread session = new Session(socket,studentID,out,in);
+            messageOut.writeUTF("Login successful");
+
+            Thread session = new Session(messageSocket,fileSocket,studentID,messageOut,messageIn,fileOut,fileIn);
             session.start();
         }
     }
